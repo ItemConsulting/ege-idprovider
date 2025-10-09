@@ -5,6 +5,7 @@ const requestLib = require('/lib/request');
 const preconditions = require('/lib/preconditions');
 const authLib = require('/lib/xp/auth');
 const portalLib = require('/lib/xp/portal');
+const eventLib = require('/lib/xp/event');
 const jwtLib = require('/lib/jwt');
 
 function redirectToAuthorizationEndpoint() {
@@ -96,7 +97,16 @@ function handleAuthenticationResponse(req) {
 
     checkClaimUsername(idToken.claims, idProviderConfig.claimUsername);
 
-    loginLib.login(idToken.accessToken, idToken.claims, false);
+    const loginResult = loginLib.login(idToken.accessToken, idToken.claims, false);
+
+    eventLib.send({
+        type: "oidcidprovider.login.user",
+        distributed: true,
+        data: {
+            idToken: idToken.idToken,
+            user: loginResult.user
+        },
+    });
 
     if (idProviderConfig.endSession && idProviderConfig.endSession.idTokenHintKey) {
         requestLib.storeIdToken(idToken.idToken);

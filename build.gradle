@@ -19,6 +19,7 @@ dependencies {
     include "com.enonic.xp:lib-auth:${xpVersion}"
     include "com.enonic.xp:lib-common:${xpVersion}"
     include "com.enonic.xp:lib-context:${xpVersion}"
+    include "com.enonic.xp:lib-event:${xpVersion}"
     include "com.enonic.xp:lib-portal:${xpVersion}"
     include "com.enonic.xp:lib-cluster:${xpVersion}"
     include "com.enonic.lib:lib-http-client:3.2.2"
