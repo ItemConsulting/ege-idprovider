@@ -86,7 +86,14 @@ public class OIDCUtils
             verification = JWT.require( Algorithm.none() );
         }
 
-        final JWTVerifier verifier = verification.withIssuer( issuer )
+        // When supporting login from multiple organizations in Entra ID the broker doesn't know which organization is the issuer.
+        // We have to replace the placeholder "{tenantid}" with the tenant-id specified in the "tid" field in the JWT for the
+        // validation to pass.
+        String iss = issuer.startsWith( "https://login.microsoftonline.com/{tenantid}/" )
+                ? getIssuerForMultiTenantBroker( issuer, decodedJWT )
+                : issuer;
+
+        final JWTVerifier verifier = verification.withIssuer( iss )
             .withAudience( clientID )
             .withClaim( "nonce", nonce )
             .acceptLeeway( 1 ) // 1 sec for nbf and iat
@@ -117,5 +124,13 @@ public class OIDCUtils
     public void initialize( final BeanContext beanContext )
     {
         this.idProviderConfigServiceSupplier = beanContext.getService( IdProviderConfigService.class );
+    }
+
+    private String getIssuerForMultiTenantBroker(String issuer, DecodedJWT decodedJWT) {
+        String tid = decodedJWT.getClaim( "tid" ).asString();
+
+        return tid != null
+                ? issuer.replace( "{tenantid}", tid )
+                : issuer;
     }
 }
