@@ -56,6 +56,24 @@ function getClaim(claims, claimKey) {
     return claim || '';
 }
 
+/**
+ * Lists the claim names received, grouped by scope, for diagnostics.
+ *
+ * Names only, never values: the values are personal data, and it is the names that answer the
+ * question a missing claim actually raises - whether the authorization server sent nothing usable,
+ * or sent the value under a name the configured mapping does not read.
+ */
+function describeClaimNames(claims) {
+    return Object.keys(claims)
+        .sort()
+        .map(scope => {
+            const scopeClaims = claims[scope];
+            const names = scopeClaims && typeof scopeClaims === 'object' ? Object.keys(scopeClaims).sort() : [];
+            return `${scope}: [${names.join(', ')}]`;
+        })
+        .join(' ');
+}
+
 function removeNonSupportedKeys(claims) {
     if (typeof claims !== 'object' || claims === null) {
         return claims;
@@ -129,6 +147,13 @@ function doCreateUser(idProviderConfig, claims, userName, isAutoLogin) {
     const displayName = resolveDisplayName(claims, idProviderConfig) || email;
 
     if (!email) {
+        // The thrown message can reach the browser, so the diagnosis goes to the log instead.
+        // Without this the log names neither the user nor what arrived, and identifying who failed
+        // means correlating timestamps against the authorization server's own sign-in logs.
+        log.warning(`No email for user '${userName}' in [${idProviderConfig._idProviderName}] ` +
+                    `resolved from mapping [${idProviderConfig.mappings.email}]. ` +
+                    `Claims received: ${describeClaimNames(claims)}`);
+
         if (isAutoLogin) {
             throwAutoLoginFailedError(`Auto login failed for user '${userName}'. User can not be created without email.`);
         }
@@ -215,17 +240,28 @@ function updateUserData(claims, idProviderConfig, user) {
     const email = resolveEmail(claims, idProviderConfig);
     const displayName = resolveDisplayName(claims, idProviderConfig) || email;
 
-    if (user.displayName !== displayName || user.email !== email) {
+    // resolveEmail() returns '' for a missing claim, and writing that through erased an address the
+    // user already had. Creating a user without one is refused outright in doCreateUser(), so an
+    // existing user keeps what is stored rather than being silently emptied - a state that is hard
+    // to trace back here, because it surfaces later as an unrelated lookup failing by email.
+    const nextEmail = email || user.email;
+
+    if (!email) {
+        log.warning(`No email for user [${user.key}] resolved from mapping [${idProviderConfig.mappings.email}], ` +
+                    `keeping the stored address. Claims received: ${describeClaimNames(claims)}`);
+    }
+
+    if (user.displayName !== displayName || user.email !== nextEmail) {
         contextLib.runAsSu(() => authLib.modifyUser({
             key: user.key,
             editor: function (c) {
                 c.displayName = displayName;
-                c.email = email;
+                c.email = nextEmail;
                 return c;
             }
         }));
 
-        log.debug(`User [${user.key}] updated with displayName [${displayName}] and email [${email}]`);
+        log.debug(`User [${user.key}] updated with displayName [${displayName}] and email [${nextEmail}]`);
     }
 }
 
