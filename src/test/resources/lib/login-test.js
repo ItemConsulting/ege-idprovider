@@ -54,11 +54,18 @@ function idProviderConfig() {
     };
 }
 
-/** Drives login() for a user that does not exist yet, and returns what createUser() was given. */
-function loginNewUser(tokenClaims, config) {
+/**
+ * Drives login() for a user that does not exist yet, and returns what createUser() was given.
+ *
+ * The config is resolved into a local first: Nashorn cannot compile an arrow function that sits
+ * inside a ternary inside an object literal - ExpressionList.accept() throws outright - and the
+ * whole test file fails to compile if one appears anywhere in it.
+ */
+function loginNewUser(tokenClaims, overrideConfig) {
+    const config = overrideConfig || idProviderConfig();
     let created = null;
 
-    setConfigMocks({getIdProviderConfig: config ? () => config : idProviderConfig});
+    setConfigMocks({getIdProviderConfig: () => config});
     setAuthMocks({
         getPrincipal: () => null,
         modifyProfile: () => ({}),

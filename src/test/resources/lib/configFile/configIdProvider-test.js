@@ -50,6 +50,7 @@ exports.testValidConfig = () => {
 
                 'idprovider.myidp.mappings.displayName': '@@{nikname} - @@{userinfo.name}',
                 'idprovider.myidp.mappings.email': '@@{email}',
+                'idprovider.myidp.mappings.emailFallback': '@@{userinfo.upn}',
 
                 'idprovider.myidp.endSession.url': 'endSessionUrl',
                 'idprovider.myidp.endSession.idTokenHintKey': 'idTokenHintKey',
@@ -93,6 +94,7 @@ exports.testValidConfig = () => {
 
     test.assertEquals('${nikname} - ${userinfo.name}', config.mappings.displayName);
     test.assertEquals('${email}', config.mappings.email);
+    test.assertEquals('${userinfo.upn}', config.mappings.emailFallback);
 
     test.assertEquals('endSessionUrl', config.endSession.url);
     test.assertEquals('idTokenHintKey', config.endSession.idTokenHintKey);
@@ -146,6 +148,7 @@ exports.testDefaultConfigWithRequiredOptions = () => {
 
     test.assertEquals('${userinfo.preferred_username}', config.mappings.displayName);
     test.assertEquals('${userinfo.email}', config.mappings.email);
+    test.assertEquals('${userinfo.preferred_username}', config.mappings.emailFallback);
 
     test.assertNull(config.endSession);
 
@@ -234,4 +237,23 @@ exports.testValidationOfEndSessionAdditionalParameters = () => {
     } catch (e) {
         test.assertEquals(`Invalid configuration of 'endSession.additionalParameters' for ID Provider '${idProviderName}'.`, e);
     }
+};
+
+exports.testEmailFallbackCanBeDisabled = () => {
+    // Blank is meaningful here, unlike the other mappings: it switches the fallback off rather than
+    // falling through to the default.
+    mockWellKnownService();
+
+    test.mock('/lib/configFile/services/getConfig', {
+        getConfigOrEmpty: function () {
+            return {
+                'idprovider.myidp.oidcWellKnownEndpoint': 'wellKnownEndpoint',
+                'idprovider.myidp.mappings.emailFallback': '',
+            }
+        }
+    });
+
+    const configProvider = require('./configProvider');
+
+    test.assertEquals('', configProvider.getIdProviderConfig('myidp').mappings.emailFallback);
 };

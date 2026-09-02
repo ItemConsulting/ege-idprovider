@@ -36,4 +36,10 @@ public class ConfigFileTest
     {
         runFunction( "/lib/configFile/configIdProvider-test.js", "testValidationOfEndSessionAdditionalParameters" );
     }
+
+    @Test
+    public void testEmailFallbackCanBeDisabled()
+    {
+        runFunction( "/lib/configFile/configIdProvider-test.js", "testEmailFallbackCanBeDisabled" );
+    }
 }
