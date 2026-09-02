@@ -8,6 +8,9 @@ const oidcLib = require('./oidc');
 
 const regExp = /\$\{([^\}]+)\}/g;
 
+// Deliberately strict, and `#` is excluded on purpose: it is what disqualifies a guest UPN.
+const EMAIL_PATTERN = /^[^\s@#]+@[^\s@#]+\.[^\s@#]+$/;
+
 function login(token, tokenClaims, isAutoLogin) {
     const idProviderKey = portalLib.getIdProviderKey();
     const idProviderConfig = configLib.getIdProviderConfig();
@@ -226,8 +229,40 @@ function throwAutoLoginFailedError(message) {
 }
 
 function resolveEmail(claims, idProviderConfig) {
-    return idProviderConfig.mappings.email.replace(regExp, (match, claimKey) => getClaim(claims, claimKey)) ||
-           claims.userinfo.email;
+    const email = idProviderConfig.mappings.email.replace(regExp, (match, claimKey) => getClaim(claims, claimKey)) ||
+                  claims.userinfo.email;
+
+    return email || resolveEmailFallback(claims, idProviderConfig);
+}
+
+/**
+ * Second chance at an address when the configured mapping yields nothing.
+ *
+ * Entra only emits an `email` claim when the directory holds a value for it; where it does not, the
+ * address still usually arrives as the UPN. Taking it is worth doing, but only once it actually
+ * looks like an address - a B2B guest UPN reads `someone_example.com#EXT#@tenant.onmicrosoft.com`,
+ * and storing that as the user's email would satisfy every check here while matching nothing
+ * downstream. Failing loudly is better than a plausible address that is quietly wrong.
+ */
+function resolveEmailFallback(claims, idProviderConfig) {
+    const mapping = idProviderConfig.mappings.emailFallback;
+
+    if (!mapping) {
+        return '';
+    }
+
+    const candidate = mapping.replace(regExp, (match, claimKey) => getClaim(claims, claimKey)).trim();
+
+    if (!candidate) {
+        return '';
+    }
+
+    if (!EMAIL_PATTERN.test(candidate)) {
+        log.warning(`Email fallback [${mapping}] resolved to [${candidate}], which is not an email address. Ignoring it.`);
+        return '';
+    }
+
+    return candidate;
 }
 
 function resolveDisplayName(claims, idProviderConfig) {

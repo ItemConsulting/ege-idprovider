@@ -70,6 +70,7 @@ idprovider.<name>.claimUsername=(string)
 idprovider.<name>.scopes=(space separated strings, defaults to "profile email")
 idprovider.<name>.mappings.displayName=(string, required, defaults to @@{userinfo.preferred_username})
 idprovider.<name>.mappings.email=(string, required, defaults to @@{userinfo.email})
+idprovider.<name>.mappings.emailFallback=(string, defaults to @@{userinfo.preferred_username})
 idprovider.<name>.defaultGroups=(space separated group keys)
 
 # Additional Endpoints

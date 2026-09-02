@@ -48,9 +48,36 @@ function idProviderConfig() {
         },
         mappings: {
             displayName: '${userinfo.preferred_username}',
-            email: '${userinfo.email}'
+            email: '${userinfo.email}',
+            emailFallback: '${userinfo.preferred_username}'
         }
     };
+}
+
+/** Drives login() for a user that does not exist yet, and returns what createUser() was given. */
+function loginNewUser(tokenClaims, config) {
+    let created = null;
+
+    setConfigMocks({getIdProviderConfig: config ? () => config : idProviderConfig});
+    setAuthMocks({
+        getPrincipal: () => null,
+        modifyProfile: () => ({}),
+        addMembers: () => {},
+        createUser: (params) => {
+            created = params;
+            return {key: `user:${params.idProvider}:${params.name}`};
+        },
+        login: () => ({authenticated: true, user: {key: STORED_USER_KEY}})
+    });
+
+    let thrown = null;
+    try {
+        lib.login('access-token', tokenClaims, false);
+    } catch (e) {
+        thrown = e;
+    }
+
+    return {created: created, thrown: thrown};
 }
 
 /**
@@ -114,4 +141,34 @@ exports.test_login_refusesToCreateUser_whenEmailClaimIsMissing = () => {
     }
 
     test.assertEquals('User can not be created without email', thrown);
+};
+
+exports.test_login_fallsBackToPreferredUsername_whenItIsAnAddress = () => {
+    const result = loginNewUser({sub: 'abc', preferred_username: 'ola@monark-no.com'});
+
+    test.assertTrue(result.created !== null);
+    test.assertEquals('ola@monark-no.com', result.created.email);
+};
+
+exports.test_login_rejectsGuestUpnAsEmail = () => {
+    // A B2B guest UPN contains '@' and would pass a naive check, but is not a deliverable address.
+    const result = loginNewUser({sub: 'abc', preferred_username: 'hg_monark-no.com#EXT#@ege.onmicrosoft.com'});
+
+    test.assertTrue(result.created === null);
+    test.assertEquals('User can not be created without email', result.thrown);
+};
+
+exports.test_login_prefersEmailClaimOverFallback = () => {
+    const result = loginNewUser({sub: 'abc', email: 'real@monark-no.com', preferred_username: 'upn@monark-no.com'});
+
+    test.assertEquals('real@monark-no.com', result.created.email);
+};
+
+exports.test_login_refusesWhenFallbackIsDisabled = () => {
+    const config = idProviderConfig();
+    config.mappings.emailFallback = '';
+
+    const result = loginNewUser({sub: 'abc', preferred_username: 'ola@monark-no.com'}, config);
+
+    test.assertEquals('User can not be created without email', result.thrown);
 };

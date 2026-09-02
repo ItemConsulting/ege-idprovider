@@ -24,4 +24,28 @@ public class LoginTest
     {
         runFunction( "/lib/login-test.js", "test_login_refusesToCreateUser_whenEmailClaimIsMissing" );
     }
+
+    @Test
+    public void testFallsBackToPreferredUsernameWhenItIsAnAddress()
+    {
+        runFunction( "/lib/login-test.js", "test_login_fallsBackToPreferredUsername_whenItIsAnAddress" );
+    }
+
+    @Test
+    public void testRejectsGuestUpnAsEmail()
+    {
+        runFunction( "/lib/login-test.js", "test_login_rejectsGuestUpnAsEmail" );
+    }
+
+    @Test
+    public void testPrefersEmailClaimOverFallback()
+    {
+        runFunction( "/lib/login-test.js", "test_login_prefersEmailClaimOverFallback" );
+    }
+
+    @Test
+    public void testRefusesWhenFallbackIsDisabled()
+    {
+        runFunction( "/lib/login-test.js", "test_login_refusesWhenFallbackIsDisabled" );
+    }
 }

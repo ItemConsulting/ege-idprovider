@@ -9,6 +9,10 @@ const firstAtsToDollar = value => value ? value.replace(/@@\{/g, '${') : value;
 
 const defaultBooleanTrue = value => value !== 'false';
 
+// Unlike the other mappings, a blank value is meaningful here - it turns the fallback off - so an
+// unset key has to be told apart from one deliberately set to nothing.
+const defaultMappingIfUnset = (value, defaultValue) => value == null ? defaultValue : firstAtsToDollar(value);
+
 exports.getIdProviderConfig = function (idProviderName) {
     const cachedConfig = wellKnownService.getIdProviderConfig(idProviderName);
     if (cachedConfig) {
@@ -43,6 +47,8 @@ exports.getIdProviderConfig = function (idProviderName) {
             displayName: firstAtsToDollar(rawIdProviderConfig[`${idProviderKeyBase}.mappings.displayName`]) ||
                          '${userinfo.preferred_username}',
             email: firstAtsToDollar(rawIdProviderConfig[`${idProviderKeyBase}.mappings.email`]) || '${userinfo.email}',
+            emailFallback: defaultMappingIfUnset(rawIdProviderConfig[`${idProviderKeyBase}.mappings.emailFallback`],
+                                                 '${userinfo.preferred_username}'),
         },
         rules: {
             forceEmailVerification: rawIdProviderConfig[`${idProviderKeyBase}.rules.forceEmailVerification`] === 'true',

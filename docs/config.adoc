@@ -117,7 +117,8 @@ claimUsername=(string, optional, defaults to "sub") // <2>
 scopes=(space separated strings, defaults to "profile email") // <3>
 mappings.displayName=(string, required, defaults to @@{userinfo.preferred_username}) // <4>
 mappings.email=(string, required, defaults to @@{userinfo.email}) // <5>
-defaultGroups=(space separated group keys) // <6>
+mappings.emailFallback=(string, defaults to @@{userinfo.preferred_username}) // <6>
+defaultGroups=(space separated group keys) // <7>
 ----
 <1> When `useUserinfo` is set to `false` the claims from `userinfoUrl` will be ignored, and you must specify your own claims below.
 <2> Set this if `useUserinfo` is false.`claimUsername` is important, as this represents the unique identifier that will keep the Enonic user and the OIDC user in sync.
@@ -125,7 +126,12 @@ TODO Examples:
 <3> Set this if `useUserinfo` is false. Defines which scopes to fetch from the OIDC server.
 <4> Template for the `displayName` uses the format `@@{expression}`, e.g. `@@{userinfo.preferred_username}`
 <5> `email` mapping uses `@@{expression}` format, e.g. `@@{userinfo.email}`
-<6> `defaultGroups` makes all users member of the specified Enonic groups. The group name must be in the format `group:[idprovidername]:[groupname]`, e.g. `group:myidprovider:authors`
+<6> `emailFallback` is consulted only when `mappings.email` resolves to nothing, and only if the
+result looks like an email address - otherwise it is ignored and login fails as before. Useful with
+Entra ID, which omits the `email` claim entirely for users whose directory entry has no `mail`
+value, while still sending the address as `preferred_username`. Set it to an empty value to switch
+the fallback off.
+<7> `defaultGroups` makes all users member of the specified Enonic groups. The group name must be in the format `group:[idprovidername]:[groupname]`, e.g. `group:myidprovider:authors`
 
 == Additional endpoints
 
