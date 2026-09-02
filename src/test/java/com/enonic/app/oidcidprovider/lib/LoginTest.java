@@ -48,4 +48,16 @@ public class LoginTest
     {
         runFunction( "/lib/login-test.js", "test_login_refusesWhenFallbackIsDisabled" );
     }
+
+    @Test
+    public void testPrefersStoredEmailOverFallback()
+    {
+        runFunction( "/lib/login-test.js", "test_login_prefersStoredEmailOverFallback" );
+    }
+
+    @Test
+    public void testHealsBlankedEmailFromFallback()
+    {
+        runFunction( "/lib/login-test.js", "test_login_healsBlankedEmailFromFallback" );
+    }
 }

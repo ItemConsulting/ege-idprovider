@@ -172,3 +172,25 @@ exports.test_login_refusesWhenFallbackIsDisabled = () => {
 
     test.assertEquals('User can not be created without email', result.thrown);
 };
+
+exports.test_login_prefersStoredEmailOverFallback = () => {
+    // The stored address came from a real claim and has matched downstream; a UPN that merely looks
+    // like an address can only preserve that or silently break it.
+    const written = loginExistingUser(
+        {key: STORED_USER_KEY, displayName: 'Old Name', email: 'ola@monark-no.com'},
+        {sub: 'abc', preferred_username: 'moved@monark-no.com'});
+
+    test.assertTrue(written !== null);
+    test.assertEquals('ola@monark-no.com', written.email);
+};
+
+exports.test_login_healsBlankedEmailFromFallback = () => {
+    // Users emptied by the missing guard in updateUserData get an address back on next login.
+    const written = loginExistingUser(
+        {key: STORED_USER_KEY, displayName: 'Old Name', email: ''},
+        {sub: 'abc', preferred_username: 'ola@monark-no.com'});
+
+    test.assertTrue(written !== null);
+    test.assertEquals('ola@monark-no.com', written.email);
+};
+

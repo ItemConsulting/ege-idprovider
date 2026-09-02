@@ -146,7 +146,7 @@ function doCreateUser(idProviderConfig, claims, userName, isAutoLogin) {
         }
     }
 
-    const email = resolveEmail(claims, idProviderConfig);
+    const email = resolveEmail(claims, idProviderConfig) || resolveEmailFallback(claims, idProviderConfig);
     const displayName = resolveDisplayName(claims, idProviderConfig) || email;
 
     if (!email) {
@@ -229,10 +229,8 @@ function throwAutoLoginFailedError(message) {
 }
 
 function resolveEmail(claims, idProviderConfig) {
-    const email = idProviderConfig.mappings.email.replace(regExp, (match, claimKey) => getClaim(claims, claimKey)) ||
-                  claims.userinfo.email;
-
-    return email || resolveEmailFallback(claims, idProviderConfig);
+    return idProviderConfig.mappings.email.replace(regExp, (match, claimKey) => getClaim(claims, claimKey)) ||
+           claims.userinfo.email;
 }
 
 /**
@@ -271,32 +269,46 @@ function resolveDisplayName(claims, idProviderConfig) {
         (match, claimKey) => getClaim(claims, claimKey)) || userinfoClaims.preferred_username || userinfoClaims.name || userinfoClaims.sub;
 }
 
+/**
+ * Precedence for an existing user: the claim, then the address already stored, then the fallback.
+ *
+ * The stored address outranks the fallback deliberately. It got there from a real `email` claim and
+ * has presumably already matched downstream, so replacing it with a UPN that merely looks like an
+ * address can only preserve that match or silently break it - and a wrong-but-valid address is worse
+ * than none, because an absent one fails immediately and visibly while a wrong one just stops
+ * matching. Only a user with nothing stored falls through to the fallback, which also heals the ones
+ * emptied by the missing guard this replaced.
+ */
 function updateUserData(claims, idProviderConfig, user) {
-    const email = resolveEmail(claims, idProviderConfig);
+    const claimEmail = resolveEmail(claims, idProviderConfig);
+    const email = claimEmail || user.email || resolveEmailFallback(claims, idProviderConfig);
     const displayName = resolveDisplayName(claims, idProviderConfig) || email;
 
-    // resolveEmail() returns '' for a missing claim, and writing that through erased an address the
-    // user already had. Creating a user without one is refused outright in doCreateUser(), so an
-    // existing user keeps what is stored rather than being silently emptied - a state that is hard
-    // to trace back here, because it surfaces later as an unrelated lookup failing by email.
-    const nextEmail = email || user.email;
+    if (!claimEmail) {
+        let outcome;
+        if (!email) {
+            outcome = 'no address available';
+        } else if (email === user.email) {
+            outcome = 'keeping the stored address';
+        } else {
+            outcome = 'using the fallback';
+        }
 
-    if (!email) {
-        log.warning(`No email for user [${user.key}] resolved from mapping [${idProviderConfig.mappings.email}], ` +
-                    `keeping the stored address. Claims received: ${describeClaimNames(claims)}`);
+        log.warning(`No email for user [${user.key}] resolved from mapping [${idProviderConfig.mappings.email}] - ` +
+                    `${outcome}. Claims received: ${describeClaimNames(claims)}`);
     }
 
-    if (user.displayName !== displayName || user.email !== nextEmail) {
+    if (user.displayName !== displayName || user.email !== email) {
         contextLib.runAsSu(() => authLib.modifyUser({
             key: user.key,
             editor: function (c) {
                 c.displayName = displayName;
-                c.email = nextEmail;
+                c.email = email;
                 return c;
             }
         }));
 
-        log.debug(`User [${user.key}] updated with displayName [${displayName}] and email [${nextEmail}]`);
+        log.debug(`User [${user.key}] updated with displayName [${displayName}] and email [${email}]`);
     }
 }
 
