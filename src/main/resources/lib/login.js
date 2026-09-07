@@ -20,12 +20,13 @@ function login(token, tokenClaims, isAutoLogin) {
 
     let claims = isAutoLogin? tokenClaims : resolveClaims(idProviderConfig, token, tokenClaims);
     let wasUserCreated = false;
+    let emailSource = 'not resolved';
     if (!user) {
         if (!isAutoLogin || idProviderConfig.autoLogin.createUser) {
             if (isAutoLogin) {
                 claims = resolveClaims(idProviderConfig, token, tokenClaims);
             }
-            doCreateUser(idProviderConfig, claims, userName, isAutoLogin);
+            emailSource = doCreateUser(idProviderConfig, claims, userName, isAutoLogin);
             wasUserCreated = true;
         } else if (isAutoLogin) {
             throwAutoLoginFailedError(`Auto login failed for user '${userName}'. User does not exist`);
@@ -37,10 +38,22 @@ function login(token, tokenClaims, isAutoLogin) {
     }
 
     if (!wasUserCreated && !isAutoLogin) {
-        updateUserData(claims, idProviderConfig, user);
+        emailSource = updateUserData(claims, idProviderConfig, user);
     }
 
-    return doLogin(idProviderConfig, userName, isAutoLogin);
+    const loginResult = doLogin(idProviderConfig, userName, isAutoLogin);
+
+    // Interactive logins only. Auto-login runs per request, so one entry per call would bury the
+    // line that says a person actually signed in. The source is the point of logging this at all:
+    // once an address is stored on the user, one that arrived by fallback is indistinguishable
+    // from one that arrived in a claim, so without it there is no way to tell from the outside
+    // whether the fallback is carrying a tenant or has simply never fired.
+    if (!isAutoLogin) {
+        const userState = wasUserCreated ? 'user created' : 'existing user';
+        log.info(`Login succeeded for [${principalKey}] - ${userState}, email from [${emailSource}]`);
+    }
+
+    return loginResult;
 }
 
 function getClaim(claims, claimKey) {
@@ -146,7 +159,9 @@ function doCreateUser(idProviderConfig, claims, userName, isAutoLogin) {
         }
     }
 
-    const email = resolveEmail(claims, idProviderConfig) || resolveEmailFallback(claims, idProviderConfig);
+    // A user being created has nothing stored yet, so the middle step of the precedence is empty.
+    const resolved = resolveEmailWithSource(claims, idProviderConfig, null);
+    const email = resolved.email;
     const displayName = resolveDisplayName(claims, idProviderConfig) || email;
 
     if (!email) {
@@ -189,6 +204,8 @@ function doCreateUser(idProviderConfig, claims, userName, isAutoLogin) {
             });
         });
     }
+
+    return resolved.source;
 }
 
 function resolveClaims(idProviderConfig, accessToken, tokenClaims) {
@@ -263,6 +280,32 @@ function resolveEmailFallback(claims, idProviderConfig) {
     return candidate;
 }
 
+/**
+ * The address, plus where it came from.
+ *
+ * Both callers already shared one precedence order - the claim, then whatever is already stored,
+ * then the fallback - and this puts it in a single place rather than open-coding it twice. The
+ * source it returns is what the caller logs; the address itself is not logged, since the claim
+ * names are what diagnose a missing one and the value is personal data.
+ */
+function resolveEmailWithSource(claims, idProviderConfig, storedEmail) {
+    const claimEmail = resolveEmail(claims, idProviderConfig);
+    if (claimEmail) {
+        return {email: claimEmail, source: 'claim'};
+    }
+
+    if (storedEmail) {
+        return {email: storedEmail, source: 'stored'};
+    }
+
+    const fallbackEmail = resolveEmailFallback(claims, idProviderConfig);
+    if (fallbackEmail) {
+        return {email: fallbackEmail, source: 'fallback'};
+    }
+
+    return {email: '', source: 'none'};
+}
+
 function resolveDisplayName(claims, idProviderConfig) {
     const userinfoClaims = claims.userinfo;
     return idProviderConfig.mappings.displayName.replace(regExp,
@@ -280,18 +323,18 @@ function resolveDisplayName(claims, idProviderConfig) {
  * emptied by the missing guard this replaced.
  */
 function updateUserData(claims, idProviderConfig, user) {
-    const claimEmail = resolveEmail(claims, idProviderConfig);
-    const email = claimEmail || user.email || resolveEmailFallback(claims, idProviderConfig);
+    const resolved = resolveEmailWithSource(claims, idProviderConfig, user.email);
+    const email = resolved.email;
     const displayName = resolveDisplayName(claims, idProviderConfig) || email;
 
-    if (!claimEmail) {
+    if (resolved.source !== 'claim') {
         let outcome;
-        if (!email) {
-            outcome = 'no address available';
-        } else if (email === user.email) {
+        if (resolved.source === 'stored') {
             outcome = 'keeping the stored address';
-        } else {
+        } else if (resolved.source === 'fallback') {
             outcome = 'using the fallback';
+        } else {
+            outcome = 'no address available';
         }
 
         log.warning(`No email for user [${user.key}] resolved from mapping [${idProviderConfig.mappings.email}] - ` +
@@ -310,6 +353,8 @@ function updateUserData(claims, idProviderConfig, user) {
 
         log.debug(`User [${user.key}] updated with displayName [${displayName}] and email [${email}]`);
     }
+
+    return resolved.source;
 }
 
 exports.login = login;
