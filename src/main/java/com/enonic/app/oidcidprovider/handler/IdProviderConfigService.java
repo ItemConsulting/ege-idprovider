@@ -9,7 +9,10 @@ import org.osgi.service.component.annotations.Component;
 
 import com.enonic.app.oidcidprovider.jwt.RSAAlgorithmProvider;
 
-@Component(immediate = true, service = IdProviderConfigService.class, configurationPid = "com.enonic.app.oidcidprovider")
+// The pid must track the application name, so that editing the app's .cfg reactivates this component
+// and clears CACHE below. It was left behind when the app was renamed, which meant config edits were
+// parsed into a cache that nothing ever invalidated - they took effect only on restart.
+@Component(immediate = true, service = IdProviderConfigService.class, configurationPid = "no.ege.oidcidprovider")
 public class IdProviderConfigService
 {
     private static final ConcurrentMap<String, IdProviderManager> CACHE = new ConcurrentHashMap<>();

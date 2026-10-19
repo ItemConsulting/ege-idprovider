@@ -1,7 +1,13 @@
 = Release notes
 :imagesdir: media/
 
-What's new in version 3 
+What's new in version 3.1
+
+- `mappings.emailFallback` is consulted when `mappings.email` resolves to nothing, and only if the result looks like an email address. Entra ID omits the `email` claim entirely for users whose directory entry has no `mail` value; those users could not be created at all, and login failed with `User can not be created without email`. Defaults to `@@{userinfo.preferred_username}`; set it empty to switch the fallback off.
+- An existing user whose `email` claim goes missing keeps the address already stored on them, instead of having it overwritten with an empty value.
+- A successful login is now logged at INFO, naming whether the user was created and where the address came from (`claim`, `stored`, `fallback` or `none`). Previously only failures were visible.
+
+What's new in version 3
 
 - Starting from version 3.0, it is possible to specify `oidcWellKnownEndpoint` (Provider's OpenID Connect Discovery URL) to obtain the values for the `issuer`,`authorization_endpoint`, `token_endpoint`,  `userinfo_endpoint` and `jwks_uri`  properties.
 - User `displayName` and `email` are now automatically updated when the user logs in with Authorization Code Flow.
